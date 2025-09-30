@@ -10,7 +10,7 @@ const options = {
       description: "API documentation for Exam Portal",
     },
     servers: [
-      { url: "https://exam-portal-flame.vercel.app" }
+      { url: "https://examportal-backend-0xnn.onrender.com" }
     ],
   },
   apis: ["./routes/**/*.js"] // include all your route files
