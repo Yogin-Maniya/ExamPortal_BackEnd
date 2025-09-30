@@ -10,7 +10,7 @@ const options = {
       description: "API documentation for Exam Portal",
     },
     servers: [
-      { url: "http://localhost:5000" }
+      { url: "https://exam-portal-flame.vercel.app" }
     ],
   },
   apis: ["./routes/**/*.js"] // include all your route files
