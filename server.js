@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { swaggerUi, specs } = require("./swagger");
 
@@ -26,7 +27,7 @@ const app = express();
 
 // ✅ Fix CORS Configuration
 app.use(cors({
-  origin: "http://localhost:3000", // Allow only your frontend
+  origin: process.env.FRONTEND_URL, // Allow only your frontend
   methods: "GET,POST,PUT,DELETE",
   allowedHeaders: "Content-Type,Authorization"
 }));
