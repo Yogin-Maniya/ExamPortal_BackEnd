@@ -117,12 +117,12 @@ router.get("/classes", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const { id: encryptedId } = req.params;
+    const { examId: encryptedId } = req.query;
+    if (!encryptedId) return res.status(400).json({ message: "Exam ID required" });
 
-    // 🔑 Decrypt the ID if it's encrypted, fallback to numeric
-    let examId = parseInt(encryptedId, 10); // try parse as number first
+    let examId = parseInt(encryptedId, 10); // fallback numeric
     if (isNaN(examId)) {
       try {
         examId = parseInt(decryptId(decodeURIComponent(encryptedId)), 10);
@@ -144,5 +144,6 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 module.exports = router;
