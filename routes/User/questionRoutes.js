@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const { decryptId } = require("../utils/encryption");
 /**
  * @swagger
  * /api/questions/{examId}:
