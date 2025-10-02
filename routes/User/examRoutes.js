@@ -1,6 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
+const { decryptId } = require("../utils/encryption");
 
 /**
  * @swagger
@@ -99,15 +100,15 @@ router.get("/classes", async (req, res) => {
  * @swagger
  * /api/exam/{id}:
  *   get:
- *     summary: Get exam by ID
+ *     summary: Get exam by ID (encrypted ID allowed)
  *     tags: [Exams]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
- *           type: integer
- *         description: Exam ID
+ *           type: string
+ *         description: Encrypted or plain Exam ID
  *     responses:
  *       200:
  *         description: Exam details
@@ -118,10 +119,21 @@ router.get("/classes", async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id: encryptedId } = req.params;
+
+    // 🔑 Decrypt the ID if it's encrypted, fallback to numeric
+    let examId = parseInt(encryptedId, 10); // try parse as number first
+    if (isNaN(examId)) {
+      try {
+        examId = parseInt(decryptId(decodeURIComponent(encryptedId)), 10);
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid exam ID" });
+      }
+    }
+
     const pool = await poolPromise;
     const result = await pool.request()
-      .input('id', sql.Int, id)
+      .input('id', sql.Int, examId)
       .query('SELECT * FROM Exams WHERE ExamId = @id');
 
     if (result.recordset.length === 0) {
