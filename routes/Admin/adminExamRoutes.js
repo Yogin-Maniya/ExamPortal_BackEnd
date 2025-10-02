@@ -223,13 +223,23 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
+
+    // 1️⃣ Delete questions related to this exam first
+    await pool.request()
+      .input('examId', sql.Int, id)
+      .query('DELETE FROM Questions WHERE ExamId = @examId');
+
+    // 2️⃣ Then delete the exam itself
     await pool.request()
       .input('id', sql.Int, id)
       .query('DELETE FROM Exams WHERE ExamId = @id');
-    res.json({ message: "Exam deleted successfully" });
+
+    res.json({ message: "Exam and its questions deleted successfully" });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
+
 
 module.exports = router;
