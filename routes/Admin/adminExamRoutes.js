@@ -220,21 +220,34 @@ router.get('/:id', async (req, res) => {
  *         description: Internal server error
  */
 router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const pool = await poolPromise;
+  const { id } = req.params;
 
-    // 1️⃣ Delete questions related to this exam first
-    await pool.request()
+  try {
+    const pool = await poolPromise;
+    const transaction = pool.transaction();
+
+    await transaction.begin();
+
+    const request = transaction.request();
+
+    // 1️⃣ Delete related questions
+    await request
       .input('examId', sql.Int, id)
       .query('DELETE FROM Questions WHERE ExamId = @examId');
 
-    // 2️⃣ Then delete the exam itself
-    await pool.request()
+    // 2️⃣ Delete related results
+    await request
+      .input('examId', sql.Int, id)
+      .query('DELETE FROM ExamResults WHERE ExamId = @examId');
+
+    // 3️⃣ Delete the exam itself
+    await request
       .input('id', sql.Int, id)
       .query('DELETE FROM Exams WHERE ExamId = @id');
 
-    res.json({ message: "Exam and its questions deleted successfully" });
+    await transaction.commit();
+
+    res.json({ message: "Exam, its questions, and results deleted successfully" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });
