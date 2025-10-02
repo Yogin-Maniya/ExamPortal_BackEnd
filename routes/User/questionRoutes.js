@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-const { decryptId } = require("../utils/encryption");
+
 /**
  * @swagger
  * /api/questions/{examId}:
@@ -23,20 +23,9 @@ const { decryptId } = require("../utils/encryption");
  *       500:
  *         description: Internal server error
  */
-router.get('/', async (req, res) => {
+router.get('/:examId', async (req, res) => {
   try {
-    const { examId: encryptedId } = req.query;
-      if (!encryptedId) return res.status(400).json({ message: "Exam ID required" });
-
-       let examId = parseInt(encryptedId, 10); // fallback numeric
-    if (isNaN(examId)) {
-      try {
-        examId = parseInt(decryptId(decodeURIComponent(encryptedId)), 10);
-      } catch (err) {
-        return res.status(400).json({ message: "Invalid exam ID" });
-      }
-    }
-
+    const { examId } = req.params;
     const pool = await poolPromise;
     const result = await pool.request()
       .input('examId', sql.Int, examId)
