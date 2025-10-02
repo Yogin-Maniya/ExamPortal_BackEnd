@@ -225,25 +225,22 @@ router.delete('/:id', async (req, res) => {
   try {
     const pool = await poolPromise;
     const transaction = pool.transaction();
-
     await transaction.begin();
 
-    const request = transaction.request();
+    // Delete Questions
+    const req1 = transaction.request();
+    await req1.input('examId1', sql.Int, id)
+               .query('DELETE FROM Questions WHERE ExamId = @examId1');
 
-    // 1️⃣ Delete related questions
-    await request
-      .input('examId', sql.Int, id)
-      .query('DELETE FROM Questions WHERE ExamId = @examId');
+    // Delete Results
+    const req2 = transaction.request();
+    await req2.input('examId2', sql.Int, id)
+               .query('DELETE FROM ExamResults WHERE ExamId = @examId2');
 
-    // 2️⃣ Delete related results
-    await request
-      .input('examId', sql.Int, id)
-      .query('DELETE FROM ExamResults WHERE ExamId = @examId');
-
-    // 3️⃣ Delete the exam itself
-    await request
-      .input('id', sql.Int, id)
-      .query('DELETE FROM Exams WHERE ExamId = @id');
+    // Delete Exam
+    const req3 = transaction.request();
+    await req3.input('examId3', sql.Int, id)
+               .query('DELETE FROM Exams WHERE ExamId = @examId3');
 
     await transaction.commit();
 
@@ -253,6 +250,7 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 
 module.exports = router;
