@@ -1,7 +1,7 @@
 // utils/encryption.js
 const crypto = require("crypto");
 
-const SECRET_KEY = process.env.SECRET_KEY || "my-secret-key-123"; // Store in .env in production
+const SECRET_KEY = process.env.SECRET_KEY ; // Store in .env in production
 const ALGORITHM = "aes-256-cbc";
 
 const encryptId = (id) => {
