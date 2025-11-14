@@ -13,7 +13,7 @@ const options = {
       { url: "https://examportal-backend-0xnn.onrender.com" }
     ],
   },
-  apis: ["./routes/**/*.js"] // include all your route files
+  apis: ["./routes/**/*.js"] // include all your route files 
 };
 
 const specs = swaggerJsDoc(options);
