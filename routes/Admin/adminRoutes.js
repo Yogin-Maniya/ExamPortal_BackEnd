@@ -3,24 +3,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sql, poolPromise } = require('../../db');
 require('dotenv').config();
-
 const router = express.Router();
-
-// ========================================================
-// Teacher Authentication Middleware
-// ========================================================
-const teacherAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "No token provided" });
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = { adminId: decoded.adminId };
-    next();
-  } catch (error) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
-};
+const { verifyToken, teacherOnly } = require("../middleware/authMiddleware");
 
 // ========================================================
 // Teacher-Specific Routes
@@ -42,51 +26,70 @@ const teacherAuth = (req, res, next) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/dashboard', teacherAuth, async (req, res) => {
+router.get('/dashboard', verifyToken,teacherOnly, async (req, res) => {
+
   try {
-    const adminId = req.admin.adminId;
+
+    const adminId = req.user.adminId;
+
     const pool = await poolPromise;
 
-    const examQuery = `
-      SELECT ExamId, ExamName, Class, TotalMarks, CreatedAt
-      FROM Exams
-      WHERE AdminId = @adminId
-      ORDER BY CreatedAt DESC
-    `;
-    const examResult = await pool.request()
-      .input('adminId', sql.Int, adminId)
-      .query(examQuery);
-    const exams = examResult.recordset;
+    const query = `
 
-    for (let exam of exams) {
-      const submissionQuery = `
-        SELECT COUNT(*) AS SubmissionCount
+    SELECT
+
+        E.ExamId,
+        E.ExamName,
+        E.Class,
+        E.TotalMarks,
+        E.CreatedAt,
+
+        ISNULL(R.SubmissionCount,0) AS submissionCount,
+
+        ISNULL(S.TotalStudents,0) AS totalStudents,
+
+        ISNULL(S.TotalStudents,0) - ISNULL(R.SubmissionCount,0) AS remaining
+
+    FROM Exams E
+
+    LEFT JOIN
+    (
+        SELECT ExamId, COUNT(*) AS SubmissionCount
         FROM ExamResults
-        WHERE ExamId = @examId
-      `;
-      const submissionResult = await pool.request()
-        .input('examId', sql.Int, exam.ExamId)
-        .query(submissionQuery);
-      exam.submissionCount = submissionResult.recordset[0].SubmissionCount;
+        GROUP BY ExamId
+    ) R ON E.ExamId = R.ExamId
 
-      const studentCountQuery = `
-        SELECT COUNT(*) AS TotalStudents
+    LEFT JOIN
+    (
+        SELECT Class, COUNT(*) AS TotalStudents
         FROM Students
-        WHERE Class = @class
-      `;
-      const studentCountResult = await pool.request()
-        .input('class', sql.NVarChar, exam.Class)
-        .query(studentCountQuery);
-      exam.totalStudents = studentCountResult.recordset[0].TotalStudents;
+        GROUP BY Class
+    ) S ON E.Class = S.Class
 
-      exam.remaining = exam.totalStudents - exam.submissionCount;
-    }
+    WHERE E.AdminId = @adminId
 
-    res.json({ exams });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    ORDER BY E.CreatedAt DESC
+
+    `;
+
+    const result = await pool.request()
+      .input("adminId", sql.Int, adminId)
+      .query(query);
+
+    res.json({
+      exams: result.recordset
+    });
+
   }
+  catch (error)
+  {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+
 });
+
 
 /**
  * @swagger
@@ -113,9 +116,9 @@ router.get('/dashboard', teacherAuth, async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/exam-results/:examId', teacherAuth, async (req, res) => {
+router.get('/exam-results/:examId',  verifyToken,teacherOnly, async (req, res) => {
   try {
-    const adminId = req.admin.adminId;
+    const adminId = req.user.adminId;
     const examId = req.params.examId;
     const pool = await poolPromise;
 
@@ -139,7 +142,7 @@ router.get('/exam-results/:examId', teacherAuth, async (req, res) => {
       .query(resultsQuery);
     res.json({ examResults: resultsResult.recordset });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -159,13 +162,13 @@ router.get('/exam-results/:examId', teacherAuth, async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/allAdmin', async (req, res) => {
+router.get('/allAdmin', verifyToken,teacherOnly, async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query('SELECT * FROM Admins');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -190,7 +193,7 @@ router.get('/allAdmin', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -200,7 +203,7 @@ router.get('/:id', async (req, res) => {
     if (result.recordset.length === 0) return res.status(404).json({ message: "Admin not found" });
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -233,7 +236,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.post('/register', async (req, res) => {
+router.post('/register' ,async (req, res) => {
   try {
     const { username, password, email } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -245,7 +248,7 @@ router.post('/register', async (req, res) => {
       .query('INSERT INTO Admins (Username, Password, Email) VALUES (@username, @password, @email)');
     res.json({ message: "Admin registered successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -291,7 +294,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign({ adminId: admin.AdminId }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -327,7 +330,7 @@ router.post('/login', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.put('/update/:id', async (req, res) => {
+router.put('/update/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const { username, email, password } = req.body;
@@ -349,7 +352,7 @@ router.put('/update/:id', async (req, res) => {
     }
     res.json({ message: "Admin updated successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -372,7 +375,7 @@ router.put('/update/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -381,8 +384,7 @@ router.delete('/:id', async (req, res) => {
       .query('DELETE FROM Admins WHERE AdminId=@id');
     res.json({ message: "Admin deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

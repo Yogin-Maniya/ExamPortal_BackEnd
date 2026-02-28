@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const { verifyToken, teacherOnly } = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/admin/feedback:
@@ -14,13 +14,13 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.get('/', async (req, res) => {
+router.get('/', verifyToken,teacherOnly, async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query('SELECT * FROM Feedback');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -58,7 +58,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -81,7 +81,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -90,8 +90,7 @@ router.delete('/:id', async (req, res) => {
       .query('DELETE FROM Feedback WHERE FeedbackId = @id');
     res.json({ message: "Feedback deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

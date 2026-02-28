@@ -10,7 +10,8 @@ const options = {
       description: "API documentation for Exam Portal",
     },
     servers: [
-      { url: "https://examportal-backend-0xnn.onrender.com" }
+      // { url: "https://examportal-backend-0xnn.onrender.com" }
+      { url: "http://localhost:5000" }
     ],
   },
   apis: ["./routes/**/*.js"] // include all your route files 

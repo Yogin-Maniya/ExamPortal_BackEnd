@@ -2,8 +2,8 @@ const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
-
 const router = express.Router();
+const { verifyToken, teacherOnly } = require("../middleware/authMiddleware");
 
 /**
  * @swagger
@@ -17,14 +17,110 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.get('/allstudent', async (req, res) => {
+router.get('/allstudent',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query('SELECT * FROM Students');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
+});
+
+router.get("/profile-edit-requests",  verifyToken,teacherOnly,async (req, res) => {
+
+  const pool = await poolPromise;
+
+  const result = await pool.request()
+    .query(`
+      SELECT r.*, s.Name AS CurrentName, s.Email AS CurrentEmail, s.Class AS CurrentClass
+      FROM StudentProfileEditRequests r
+      INNER JOIN Students s ON r.StudentId = s.StudentId
+      WHERE r.Status = 'Pending'
+      ORDER BY r.RequestedAt DESC
+    `);
+
+  res.json(result.recordset);
+
+});
+
+router.post("/approve-profile-edit/:requestId", verifyToken,teacherOnly, async (req, res) => {
+
+  const { requestId } = req.params;
+
+  const pool = await poolPromise;
+
+  const transaction = new sql.Transaction(await pool);
+
+  try {
+
+    await transaction.begin();
+
+    const requestResult = await transaction.request()
+      .input("requestId", sql.Int, requestId)
+      .query(`
+        SELECT * FROM StudentProfileEditRequests
+        WHERE RequestId = @requestId
+      `);
+
+    if (requestResult.recordset.length === 0)
+      throw new Error("Request not found");
+
+    const reqData = requestResult.recordset[0];
+
+    await transaction.request()
+      .input("studentId", sql.Int, reqData.StudentId)
+      .input("name", sql.NVarChar, reqData.NewName)
+      .input("email", sql.NVarChar, reqData.NewEmail)
+      .input("studentClass", sql.NVarChar, reqData.NewClass)
+      .query(`
+        UPDATE Students
+        SET
+          Name = @name,
+          Email = @email,
+          Class = @studentClass
+        WHERE StudentId = @studentId
+      `);
+
+    await transaction.request()
+      .input("requestId", sql.Int, requestId)
+      .query(`
+        UPDATE StudentProfileEditRequests
+        SET
+          Status = 'Approved',
+          ApprovedAt = GETDATE()
+        WHERE RequestId = @requestId
+      `);
+
+    await transaction.commit();
+
+    res.json({ message: "Profile update approved and applied" });
+
+  }
+  catch (error)
+  {
+    await transaction.rollback();
+    throw error;
+  }
+
+});
+
+router.post("/reject-profile-edit/:requestId",  verifyToken,teacherOnly,async (req, res) => {
+
+  const { requestId } = req.params;
+
+  const pool = await poolPromise;
+
+  await pool.request()
+    .input("requestId", sql.Int, requestId)
+    .query(`
+      UPDATE StudentProfileEditRequests
+      SET Status = 'Rejected'
+      WHERE RequestId = @requestId
+    `);
+
+  res.json({ message: "Request rejected" });
+
 });
 
 /**
@@ -48,7 +144,7 @@ router.get('/allstudent', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -61,7 +157,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 /**
@@ -100,7 +196,7 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, studentClass, password } = req.body;
@@ -144,7 +240,29 @@ router.put('/:id', async (req, res) => {
     res.json({ message: "Student updated successfully" });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
+});
+
+router.delete("/:id", verifyToken, teacherOnly, async (req, res) => {
+
+  const { id } = req.params;
+
+  try {
+
+    const pool = await poolPromise;
+
+    await pool.request()
+      .input("id", sql.Int, id)
+      .query("DELETE FROM Students WHERE StudentId = @id");
+
+    res.json({ message: "Student deleted" });
+
+  }
+  catch (error)
+  {
+    throw error;
+  }
+
 });
 module.exports = router;

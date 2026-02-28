@@ -1,6 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
+const {verifyToken,studentOnly} = require("../middleware/authMiddleware");
 
 /**
  * @swagger
@@ -14,13 +15,13 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.get('/AllExams', async (req, res) => {
+router.get('/AllExams', verifyToken,studentOnly,async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query('SELECT * FROM Exams');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -45,7 +46,7 @@ router.get('/AllExams', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get("/class/:className", async (req, res) => {
+router.get("/class/:className", verifyToken,studentOnly,async (req, res) => {
   try {
     const { className } = req.params;
     const pool = await poolPromise;
@@ -60,7 +61,7 @@ router.get("/class/:className", async (req, res) => {
 
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -78,7 +79,7 @@ router.get("/class/:className", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get("/classes", async (req, res) => {
+router.get("/classes",verifyToken,async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool
@@ -91,7 +92,7 @@ router.get("/classes", async (req, res) => {
 
     res.json(result.recordset.map((row) => row.Class));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -116,7 +117,7 @@ router.get("/classes", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken,async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -129,8 +130,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

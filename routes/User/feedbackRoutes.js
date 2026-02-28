@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const {verifyToken,studentOnly} = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/feedback/submit:
@@ -30,7 +30,7 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/submit', async (req, res) => {
+router.post('/submit',verifyToken,studentOnly, async (req, res) => {
   try {
     const { studentId, message } = req.body;
     const pool = await poolPromise;
@@ -40,7 +40,7 @@ router.post('/submit', async (req, res) => {
       .query(`INSERT INTO Feedback (StudentId, Message) VALUES (@studentId, @message)`);
     res.json({ message: "Feedback submitted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -63,7 +63,7 @@ router.post('/submit', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/AllFeedback/:studentId', async (req, res) => {
+router.get('/AllFeedback/:studentId',verifyToken,studentOnly, async (req, res) => {
   try {
     const { studentId } = req.params; // get id from URL
     const pool = await poolPromise;
@@ -77,9 +77,8 @@ router.get('/AllFeedback/:studentId', async (req, res) => {
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 
 module.exports = router;

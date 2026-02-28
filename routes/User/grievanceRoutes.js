@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const {verifyToken,studentOnly} = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/grievances/submit:
@@ -30,7 +30,7 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/submit', async (req, res) => {
+router.post('/submit', verifyToken,studentOnly,async (req, res) => {
   try {
     const { studentId, issue } = req.body;
     const pool = await poolPromise;
@@ -40,8 +40,7 @@ router.post('/submit', async (req, res) => {
       .query(`INSERT INTO Grievances (StudentId, Issue) VALUES (@studentId, @issue)`);
     res.json({ message: "Grievance submitted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

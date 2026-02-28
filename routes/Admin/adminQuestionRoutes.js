@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const { verifyToken, teacherOnly } = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/admin/question/{examId}/questions:
@@ -44,7 +44,7 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/:examId/questions', async (req, res) => {
+router.post('/:examId/questions',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const { examId } = req.params;
     const { questions } = req.body;
@@ -80,7 +80,7 @@ router.post('/:examId/questions', async (req, res) => {
     }
     res.json({ message: "Questions added successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -103,7 +103,7 @@ router.post('/:examId/questions', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:examId', async (req, res) => {
+router.get('/:examId', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { examId } = req.params;
     const pool = await poolPromise;
@@ -112,7 +112,7 @@ router.get('/:examId', async (req, res) => {
       .query('SELECT * FROM Questions WHERE ExamId = @examId');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -135,7 +135,7 @@ router.get('/:examId', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -144,7 +144,7 @@ router.delete('/:id', async (req, res) => {
       .query('DELETE FROM Questions WHERE QuestionId = @id');
     res.json({ message: "Question deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -173,7 +173,7 @@ router.delete('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:examId/questions/:questionId', async (req, res) => {
+router.get('/:examId/questions/:questionId', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { examId, questionId } = req.params;
     const pool = await poolPromise;
@@ -187,7 +187,7 @@ router.get('/:examId/questions/:questionId', async (req, res) => {
     }
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -237,7 +237,7 @@ router.get('/:examId/questions/:questionId', async (req, res) => {
  *         description: Internal server error
  */
 
-router.put('/:examId/question/:questionId', async (req, res) => {
+router.put('/:examId/question/:questionId',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const { examId, questionId } = req.params;
     const { questionText, optionA, optionB, optionC, optionD, optionE, correctOption } = req.body;
@@ -265,8 +265,7 @@ router.put('/:examId/question/:questionId', async (req, res) => {
       `);
     res.json({ message: "Question updated successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

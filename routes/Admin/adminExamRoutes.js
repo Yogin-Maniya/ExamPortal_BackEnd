@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const { verifyToken, teacherOnly } = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/admin/exams/create:
@@ -45,16 +45,35 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/create', async (req, res) => {
-  try {
-    const { examName, totalMarks, durationMinutes, className, startTime, endTime, adminId } = req.body;
+router.post('/create',  verifyToken,teacherOnly,async (req, res) => {
 
-    if (!adminId) {
-      return res.status(400).json({ message: "AdminId is required" });
-    }
+  try {
+
+    const {
+      examName,
+      totalMarks,
+      durationMinutes,
+      className,
+      startTime,
+      endTime,
+      adminId
+    } = req.body;
+
+    if (!adminId)
+      return res.status(400).json({
+        message: "AdminId is required"
+      });
+
 
     const pool = await poolPromise;
-    await pool.request()
+
+
+    //----------------------------------
+    // INSERT and return ExamId
+    //----------------------------------
+
+    const result = await pool.request()
+
       .input('examName', sql.NVarChar, examName)
       .input('totalMarks', sql.Int, totalMarks)
       .input('durationMinutes', sql.Int, durationMinutes)
@@ -62,14 +81,57 @@ router.post('/create', async (req, res) => {
       .input('startTime', sql.DateTime, startTime)
       .input('endTime', sql.DateTime, endTime)
       .input('adminId', sql.Int, adminId)
-      .query(`INSERT INTO Exams (ExamName, TotalMarks, DurationMinutes, Class, StartTime, EndTime, AdminId) 
-              VALUES (@examName, @totalMarks, @durationMinutes, @className, @startTime, @endTime, @adminId)`);
 
-    res.json({ message: "Exam created successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+      .query(`
+        INSERT INTO Exams
+        (
+          ExamName,
+          TotalMarks,
+          DurationMinutes,
+          Class,
+          StartTime,
+          EndTime,
+          AdminId
+        )
+
+        OUTPUT INSERTED.ExamId
+
+        VALUES
+        (
+          @examName,
+          @totalMarks,
+          @durationMinutes,
+          @className,
+          @startTime,
+          @endTime,
+          @adminId
+        )
+      `);
+
+
+    //----------------------------------
+    // return examId
+    //----------------------------------
+
+    res.json({
+
+      message: "Exam created successfully",
+
+      ExamId: result.recordset[0].ExamId
+
+    });
+
   }
+  catch (error)
+  {
+    res.status(500).json({
+      error: error.message
+    });
+  }
+
 });
+
+
 
 /**
  * @swagger
@@ -111,7 +173,7 @@ router.post('/create', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const { id } = req.params;
     const { examName, totalMarks, durationMinutes, className, startTime, endTime } = req.body;
@@ -136,7 +198,7 @@ router.put('/:id', async (req, res) => {
       `);
     res.json({ message: "Exam updated successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -152,13 +214,13 @@ router.put('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/', async (req, res) => {
+router.get('/',  verifyToken,teacherOnly,async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query('SELECT * FROM Exams');
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -183,7 +245,7 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', verifyToken,teacherOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -196,7 +258,7 @@ router.get('/:id', async (req, res) => {
     }
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -219,38 +281,80 @@ router.get('/:id', async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, teacherOnly, async (req, res) => {
+
   const { id } = req.params;
 
+  let transaction; // ⭐ MOVE OUTSIDE
+
   try {
+
     const pool = await poolPromise;
-    const transaction = pool.transaction();
+
+    transaction = new sql.Transaction(pool);
+
     await transaction.begin();
 
-    // Delete Questions
-    const req1 = transaction.request();
-    await req1.input('examId1', sql.Int, id)
-               .query('DELETE FROM Questions WHERE ExamId = @examId1');
+    //------------------------------------------------
+    // DELETE MOST CHILD TABLES FIRST
+    //------------------------------------------------
 
-    // Delete Results
-    const req2 = transaction.request();
-    await req2.input('examId2', sql.Int, id)
-               .query('DELETE FROM ExamResults WHERE ExamId = @examId2');
+    await transaction.request()
+      .input("examId", sql.Int, id)
+      .query(`
+        DELETE FROM ExamSubmissions
+        WHERE ExamId = @examId
+      `);
+    //------------------------------------------------
+    // DELETE RESULT TABLE
+    //------------------------------------------------
 
-    // Delete Exam
-    const req3 = transaction.request();
-    await req3.input('examId3', sql.Int, id)
-               .query('DELETE FROM Exams WHERE ExamId = @examId3');
+    await transaction.request()
+      .input("examId", sql.Int, id)
+      .query(`
+        DELETE FROM ExamResults
+        WHERE ExamId = @examId
+      `);
+
+    //------------------------------------------------
+    // DELETE QUESTIONS
+    //------------------------------------------------
+
+    await transaction.request()
+      .input("examId", sql.Int, id)
+      .query(`
+        DELETE FROM Questions
+        WHERE ExamId = @examId
+      `);
+
+    //------------------------------------------------
+    // DELETE EXAM LAST
+    //------------------------------------------------
+
+    await transaction.request()
+      .input("examId", sql.Int, id)
+      .query(`
+        DELETE FROM Exams
+        WHERE ExamId = @examId
+      `);
 
     await transaction.commit();
 
-    res.json({ message: "Exam, its questions, and results deleted successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    res.json({
+      message: "Exam and ALL references deleted successfully"
+    });
+
   }
+  catch (error)
+  {
+    // ⭐ SAFE ROLLBACK
+    if (transaction) {
+      await transaction.rollback();
+    }
+
+   throw error;
+  }
+
 });
-
-
 
 module.exports = router;

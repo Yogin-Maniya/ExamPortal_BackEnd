@@ -1,7 +1,7 @@
 const express = require('express');
 const { sql, poolPromise } = require('../../db');
 const router = express.Router();
-
+const {verifyToken,studentOnly} = require("../middleware/authMiddleware");
 /**
  * @swagger
  * /api/questions/{examId}:
@@ -23,13 +23,25 @@ const router = express.Router();
  *       500:
  *         description: Internal server error
  */
-router.get('/:examId', async (req, res) => {
+router.get('/:examId',verifyToken,studentOnly, async (req, res) => {
   try {
     const { examId } = req.params;
     const pool = await poolPromise;
-    const result = await pool.request()
+     const result = await pool.request()
       .input('examId', sql.Int, examId)
-      .query('SELECT * FROM Questions WHERE ExamId = @examId');
+      .query(`
+        SELECT
+          QuestionId,
+          ExamId,
+          QuestionText,
+          OptionA,
+          OptionB,
+          OptionC,
+          OptionD,
+          OptionE
+        FROM Questions
+        WHERE ExamId = @examId
+      `);
 
     if (result.recordset.length === 0) {
       return res.status(404).json({ message: "No questions found for this exam" });
@@ -37,8 +49,7 @@ router.get('/:examId', async (req, res) => {
 
     res.json(result.recordset);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
-
 module.exports = router;

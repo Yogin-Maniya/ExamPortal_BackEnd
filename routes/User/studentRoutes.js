@@ -3,9 +3,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sql, poolPromise } = require('../../db');
 require('dotenv').config();
-
 const router = express.Router();
-
+const {verifyToken,studentOnly} = require("../middleware/authMiddleware");
 /**
  * @swagger
  * tags:
@@ -64,7 +63,7 @@ router.post('/register', async (req, res) => {
 
     res.json({ message: "Student registered successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -121,12 +120,12 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { studentId: student.StudentId, studentClass: student.Class },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "3h" }
     );
 
     res.json({ token, studentClass: student.Class });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
@@ -146,14 +145,11 @@ router.post("/login", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get("/my-exams", async (req, res) => {
+router.get("/my-exams", verifyToken,studentOnly,async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Unauthorized access" });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const studentId = decoded.studentId;
-    const studentClass = decoded.studentClass;
+    const studentId = req.user.studentId;
+    const studentClass = req.user.studentClass;
 
     const pool = await poolPromise;
     const examsResult = await pool
@@ -175,10 +171,46 @@ router.get("/my-exams", async (req, res) => {
 
     res.json({ upcomingExams, completedExams: completedExamsList });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
 
+/**
+ * Submit profile edit request
+ */
+router.post("/request-profile-edit",verifyToken,studentOnly, async (req, res) => {
+
+  try {
+
+    const studentId = req.user.studentId;
+
+    const { name, email, studentClass } = req.body;
+
+    const pool = await poolPromise;
+
+    await pool.request()
+      .input("studentId", sql.Int, studentId)
+      .input("name", sql.NVarChar, name)
+      .input("email", sql.NVarChar, email)
+      .input("studentClass", sql.NVarChar, studentClass)
+      .query(`
+        INSERT INTO StudentProfileEditRequests
+        (StudentId, NewName, NewEmail, NewClass)
+        VALUES
+        (@studentId, @name, @email, @studentClass)
+      `);
+
+    res.json({
+      message: "Profile edit request sent for admin approval"
+    });
+
+  }
+  catch (error)
+  {
+    throw error;
+  }
+
+});
 /**
  * @swagger
  * /api/students/{id}:
@@ -200,7 +232,7 @@ router.get("/my-exams", async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id',verifyToken,studentOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const pool = await poolPromise;
@@ -214,9 +246,10 @@ router.get('/:id', async (req, res) => {
       
     res.json(result.recordset[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    throw error;
   }
 });
+
 
 // Export router once
 module.exports = router;
